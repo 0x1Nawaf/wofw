@@ -1,0 +1,42 @@
+# Build artifacts
+wofw
+wofwd
+*.o
+*.a
+*.so
+*.so.*
+
+# Debian package build outputs
+debian/files
+debian/*.debhelper
+debian/*.substvars
+debian/debhelper-build-stamp
+debian/wofw/
+debian/.debhelper/
+debian/tmp/
+
+# debuild outputs (often written one directory above the source tree)
+../*.deb
+../*.ddeb
+../*.build
+../*.buildinfo
+../*.changes
+../*.tar.*
+../*.upload
+
+# Editor / OS
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+.DS_Store
+
+# Void / local packaging scratch
+*.tar.gz
+srcpkgs/
+
+# Valgrind / debug
+vgcore.*
+core
+core.*

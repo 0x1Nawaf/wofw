@@ -1,0 +1,15 @@
+[Unit]
+Description=wofw userspace firewall
+Documentation=file:/usr/local/share/doc/wofw/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wofwd
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
