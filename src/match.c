@@ -52,7 +52,7 @@ wofw_match_result_t wofw_match_evaluate(const wofw_packet_t *pkt,
     result.rule_index = -1;
     result.action = ruleset->default_policy;
 
-    if (pkt == NULL || ruleset == NULL) {
+    if (pkt == NULL || ruleset == NULL || ruleset->rules == NULL) {
         return result;
     }
 

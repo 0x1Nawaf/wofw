@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <linux/netfilter.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -18,6 +19,22 @@ struct wofw_nfq {
     struct nfq_q_handle *qh;
     wofw_ruleset_t *ruleset;
 };
+
+static int wofw_nfq_apply_verdict(struct nfq_q_handle *qh, uint32_t id,
+                                  wofw_action_t action)
+{
+    uint32_t verdict = (action == WOFW_ACTION_DROP) ? NF_DROP : NF_ACCEPT;
+
+    if (nfq_set_verdict(qh, id, verdict, 0, NULL) == 0) {
+        return 0;
+    }
+
+    fprintf(stderr,
+            "wofwd: nfq_set_verdict failed (id=%u errno=%s); accepting packet\n",
+            id, strerror(errno));
+    nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+    return 0;
+}
 
 static int wofw_nfq_callback(struct nfq_q_handle *qh,
                       struct nfgenmsg *nfmsg,
@@ -31,13 +48,12 @@ static int wofw_nfq_callback(struct nfq_q_handle *qh,
     int payload_len;
     wofw_packet_t pkt;
     wofw_match_result_t result;
-    int verdict;
 
     (void)nfmsg;
 
     ph = nfq_get_msg_packet_hdr(nfa);
     if (ph == NULL) {
-        return nfq_set_verdict(qh, 0, NF_ACCEPT, 0, NULL);
+        return 0;
     }
 
     id = ntohl(ph->packet_id);
@@ -53,8 +69,7 @@ static int wofw_nfq_callback(struct nfq_q_handle *qh,
         pkt.dst_port = 0;
         pkt.ip_proto = 0;
         wofw_log_decision(&pkt, &result);
-        verdict = (result.action == WOFW_ACTION_DROP) ? NF_DROP : NF_ACCEPT;
-        return nfq_set_verdict(qh, id, (uint32_t)verdict, 0, NULL);
+        return wofw_nfq_apply_verdict(qh, id, result.action);
     }
 
     pkt = wofw_packet_parse(payload, (size_t)payload_len);
@@ -62,14 +77,12 @@ static int wofw_nfq_callback(struct nfq_q_handle *qh,
         result.action = nfq->ruleset->default_policy;
         result.rule_index = -1;
         wofw_log_decision(&pkt, &result);
-        verdict = (result.action == WOFW_ACTION_DROP) ? NF_DROP : NF_ACCEPT;
-        return nfq_set_verdict(qh, id, (uint32_t)verdict, 0, NULL);
+        return wofw_nfq_apply_verdict(qh, id, result.action);
     }
 
     result = wofw_match_evaluate(&pkt, nfq->ruleset);
     wofw_log_decision(&pkt, &result);
-    verdict = (result.action == WOFW_ACTION_DROP) ? NF_DROP : NF_ACCEPT;
-    return nfq_set_verdict(qh, id, (uint32_t)verdict, 0, NULL);
+    return wofw_nfq_apply_verdict(qh, id, result.action);
 }
 
 wofw_nfq_t *wofw_nfq_open(uint16_t queue_num, wofw_ruleset_t *ruleset)
@@ -114,6 +127,10 @@ wofw_nfq_t *wofw_nfq_open(uint16_t queue_num, wofw_ruleset_t *ruleset)
         nfq_close(nfq->h);
         free(nfq);
         return NULL;
+    }
+
+    if (nfq_set_queue_maxlen(nfq->qh, 8192) < 0) {
+        /* Non-fatal on older kernels. */
     }
 
     return nfq;
@@ -163,6 +180,9 @@ int wofw_nfq_handle_packet(wofw_nfq_t *nfq)
             return 0;
         }
         return -1;
+    }
+    if (nread == 0) {
+        return 0;
     }
 
     rv = nfq_handle_packet(nfq->h, buf, (int)nread);

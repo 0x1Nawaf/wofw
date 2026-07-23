@@ -40,3 +40,6 @@ srcpkgs/
 vgcore.*
 core
 core.*
+
+#logs
+*.log

@@ -207,7 +207,7 @@ static int daemon_run_loop(wofw_daemon_t *daemon)
 
         if (fds[0].revents & POLLIN) {
             if (wofw_nfq_handle_packet(daemon->nfq) < 0 && errno != EINTR) {
-                return -1;
+                fprintf(stderr, "wofwd: packet read error: %s\n", strerror(errno));
             }
         }
     }
@@ -328,6 +328,33 @@ static void client_usage(const char *prog)
             prog, prog, prog, prog, prog);
 }
 
+static int join_rule_args(int argc, char *argv[], char *out, size_t outlen)
+{
+    int i;
+    size_t pos = 0;
+    int n;
+
+    if (argc <= 3) {
+        return -1;
+    }
+
+    for (i = 3; i < argc; i++) {
+        if (i > 3) {
+            if (pos + 1 >= outlen) {
+                return -1;
+            }
+            out[pos++] = ' ';
+        }
+        n = snprintf(out + pos, outlen - pos, "%s", argv[i]);
+        if (n < 0 || (size_t)n >= outlen - pos) {
+            return -1;
+        }
+        pos += (size_t)n;
+    }
+
+    return 0;
+}
+
 static int client_print_line(const char *line, void *ctx)
 {
     (void)ctx;
@@ -375,11 +402,17 @@ static int run_client(int argc, char *argv[])
 
     if (strcmp(argv[1], "rule") == 0 && argc >= 3) {
         if (strcmp(argv[2], "add") == 0) {
+            char rule_line[WOFW_CTL_BUF_SIZE - 4];
+
             if (argc < 4) {
                 fprintf(stderr, "wofw: missing rule line\n");
                 return 1;
             }
-            snprintf(cmd, sizeof(cmd), "ADD %s", argv[3]);
+            if (join_rule_args(argc, argv, rule_line, sizeof(rule_line)) != 0) {
+                fprintf(stderr, "wofw: rule line too long\n");
+                return 1;
+            }
+            snprintf(cmd, sizeof(cmd), "ADD %s", rule_line);
             if (wofw_ctl_client_request(cmd, resp, sizeof(resp)) != 0) {
                 fprintf(stderr, "wofw: cannot connect to wofwd\n");
                 return 1;
